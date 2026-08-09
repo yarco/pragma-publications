@@ -13,6 +13,7 @@ import { processData, countPublications } from './lib/publications.mjs';
 import { evaluateCandidate } from './lib/gate.mjs';
 import { renderSuccess } from './lib/render.mjs';
 import { buildStatus, deriveBaseline } from './lib/static-state.mjs';
+import { fetchJsonWithRetry } from './lib/fetch-json.mjs';
 
 const OUT_DIR = 'dist';
 const OUT_SCRIPT = path.join(OUT_DIR, 'getPublications.js');
@@ -34,17 +35,6 @@ async function readJson(file) {
     }
 }
 
-async function fetchJson(url) {
-    const response = await fetch(`${url}?baseline=${Date.now()}`, {
-        cache: 'no-store',
-        signal: AbortSignal.timeout(15_000)
-    });
-    if (!response.ok) {
-        throw new Error(`${url} returned HTTP ${response.status}`);
-    }
-    return await response.json();
-}
-
 async function readPrevious() {
     if (BASELINE_URL) {
         console.log(`[generate] loading publish-gate baseline from ${BASELINE_URL}`);
@@ -52,8 +42,8 @@ async function readPrevious() {
         // Falling back to an older repository snapshot could lower a high-water
         // mark and let a degraded candidate replace the live deployment.
         return await Promise.all([
-            fetchJson(`${BASELINE_URL}/publications.json`),
-            fetchJson(`${BASELINE_URL}/status.json`)
+            fetchJsonWithRetry(`${BASELINE_URL}/publications.json`),
+            fetchJsonWithRetry(`${BASELINE_URL}/status.json`)
         ]);
     }
 
