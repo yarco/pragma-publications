@@ -73,5 +73,57 @@ Every build after bootstrap gates against the currently published data and
 high-water marks. A configured remote baseline is fail-closed: if it cannot be
 read, the build does not publish.
 
-The old VPS service remains the external rollback path during the proving period.
-Do not retire it until the Worker endpoint has served correctly for several days.
+## Production endpoints
+
+- `https://redesignmypage.com/getPublications.js` is the stable URL loaded by
+  Webflow. `redesignmypage.com` is a Cloudflare Worker custom domain, so the
+  Webflow embed does not need to change.
+- `https://pragma-publications.pragma-publications.workers.dev/getPublications.js`
+  is the provider-owned origin and remains enabled for diagnostics and build
+  baselines.
+- `/publications.json` contains the accepted dataset and `/status.json` contains
+  its generation timestamp, counts, and high-water marks.
+
+Both hostnames serve the same immutable deployment assets. A successful daily
+build replaces them atomically; a failed build leaves the last good version live.
+
+## Operations
+
+The scheduled handler runs daily at `04:23 UTC`. It POSTs the private Workers
+Builds deploy hook, then sends a correlated `/start` ping to Healthchecks.io.
+`npm run deploy:production` sends the matching success ping only after the new
+Worker version is live. Healthchecks.io uses the same cron expression with a
+30-minute grace period, so a missing schedule, failed generation, rejected
+retention gate, failed deployment, or missing success ping raises an alert.
+
+Useful checks:
+
+```bash
+npm test
+curl -fsS https://redesignmypage.com/status.json
+curl -fsSI https://redesignmypage.com/getPublications.js
+npx wrangler deployments status
+```
+
+Runtime secrets are `DEPLOY_HOOK_URL` and `HEALTHCHECKS_PING_URL`. Workers Builds
+has the secret `HEALTHCHECKS_PING_URL` and the plaintext variable `BASELINE_URL`.
+Never commit their values. See `wrangler.jsonc` for the schedule, static-assets
+binding, and custom domain; the Cloudflare dashboard remains the source of truth
+for encrypted values and the deploy hook.
+
+## Rollback
+
+For a bad generated dataset or Worker release, roll back to the preceding Worker
+deployment with `npx wrangler rollback`, then verify both production endpoints.
+The publish gate and high-water marks should normally prevent this case.
+
+The former VPS origin is no longer a rollback target. Do not detach the custom
+domain or restore its old A record: `dblp-rpc.service` and
+`/home/ubuntu/dblp-rpc` were removed on 2026-08-09. Recover by rolling back or
+redeploying the Worker while leaving `redesignmypage.com` attached.
+
+The old Let's Encrypt certificate and renewal configuration were deliberately
+retained because a separate Redbelly workflow depends on them. They are not used
+by the publications Worker and are not required for a Worker rollback. A Certbot
+dry-run succeeded after cutover using the existing `dns-cloudflare` authenticator;
+the credential file is owner-only (`0600`).
