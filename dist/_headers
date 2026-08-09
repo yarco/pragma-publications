@@ -1,0 +1,11 @@
+/getPublications.js
+  Cache-Control: public, max-age=10800, stale-while-revalidate=86400
+  X-Content-Type-Options: nosniff
+
+/publications.json
+  Cache-Control: no-cache
+  X-Content-Type-Options: nosniff
+
+/status.json
+  Cache-Control: no-store
+  X-Content-Type-Options: nosniff

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "generatedAt": "2026-08-09T14:25:14.763Z",
+  "source": "bootstrap",
+  "totalPublications": 69,
+  "selectedPublications": 40,
+  "baseline": {
+    "maxTotal": 69,
+    "maxSelected": 40
+  }
+}
