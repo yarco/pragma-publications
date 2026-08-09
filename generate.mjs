@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Static generator for the scheduled GitHub Actions build.
+// Static generator for the scheduled Cloudflare Workers Build.
 //
-// Writes the Pages artifact. Applies the same publish gate as the server,
+// Writes the Worker Static Assets artifact. Applies the same publish gate as the server,
 // comparing against the last committed data and its persisted high-water marks,
 // so a silently broken upstream scrape exits non-zero and leaves the last good
 // deployment live.

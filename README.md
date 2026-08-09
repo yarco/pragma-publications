@@ -62,7 +62,7 @@ Pages project, paid Worker, VPS, or GitHub Actions minutes are used.
    `npm run deploy:production`.
 4. Create a deploy hook for `main` and store it as Worker secret
    `DEPLOY_HOOK_URL`.
-5. Create a free Healthchecks.io check (one-day period, two-hour grace). Store
+5. Create a free Healthchecks.io check (daily cron schedule, 30-minute grace). Store
    its ping URL twice: as runtime Worker secret `HEALTHCHECKS_PING_URL`, and as a
    Workers Builds secret with the same name. Runtime sends `/start`; the build
    sends success only after deployment.
