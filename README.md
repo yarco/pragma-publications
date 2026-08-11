@@ -67,7 +67,10 @@ Pages project, paid Worker, VPS, or GitHub Actions minutes are used.
    Workers Builds secret with the same name. Runtime sends `/start`; the build
    sends success only after deployment.
 6. Set the Workers Builds variable `BASELINE_URL` to the stable `workers.dev`
-   origin. Workers Builds supplies `WORKERS_CI_BUILD_UUID` automatically.
+   origin and `BASELINE_FALLBACK_URL` to the Worker's custom-domain origin.
+   Both hostnames serve the same deployment; the second path prevents a transient
+   hostname failure from aborting the refresh. Workers Builds supplies
+   `WORKERS_CI_BUILD_UUID` automatically.
 
 Every build after bootstrap gates against the currently published data and
 high-water marks. A configured remote baseline is fail-closed: if it cannot be
@@ -106,10 +109,10 @@ npx wrangler deployments status
 ```
 
 Runtime secrets are `DEPLOY_HOOK_URL` and `HEALTHCHECKS_PING_URL`. Workers Builds
-has the secret `HEALTHCHECKS_PING_URL` and the plaintext variable `BASELINE_URL`.
-Never commit their values. See `wrangler.jsonc` for the schedule, static-assets
-binding, and custom domain; the Cloudflare dashboard remains the source of truth
-for encrypted values and the deploy hook.
+has the secret `HEALTHCHECKS_PING_URL` and the plaintext variables `BASELINE_URL`
+and `BASELINE_FALLBACK_URL`. Never commit secret values. See `wrangler.jsonc` for
+the schedule, static-assets binding, and custom domain; the Cloudflare dashboard
+remains the source of truth for encrypted values and the deploy hook.
 
 ## Rollback
 

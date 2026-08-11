@@ -13,13 +13,16 @@ import { processData, countPublications } from './lib/publications.mjs';
 import { evaluateCandidate } from './lib/gate.mjs';
 import { renderSuccess } from './lib/render.mjs';
 import { buildStatus, deriveBaseline } from './lib/static-state.mjs';
-import { fetchJsonWithRetry } from './lib/fetch-json.mjs';
+import {
+    configuredBaselineUrls,
+    fetchBaselineWithFallback
+} from './lib/baseline.mjs';
 
 const OUT_DIR = 'dist';
 const OUT_SCRIPT = path.join(OUT_DIR, 'getPublications.js');
 const OUT_DATA = path.join(OUT_DIR, 'publications.json');
 const OUT_STATUS = path.join(OUT_DIR, 'status.json');
-const BASELINE_URL = process.env.BASELINE_URL?.replace(/\/+$/, '') || null;
+const BASELINE_URLS = configuredBaselineUrls();
 const SOURCE = process.env.PUBLICATION_SOURCE
     || (process.env.WORKERS_CI ? 'cloudflare-worker' : 'local');
 
@@ -36,15 +39,14 @@ async function readJson(file) {
 }
 
 async function readPrevious() {
-    if (BASELINE_URL) {
-        console.log(`[generate] loading publish-gate baseline from ${BASELINE_URL}`);
+    if (BASELINE_URLS.length) {
+        console.log(
+            `[generate] loading publish-gate baseline from ${BASELINE_URLS.join(' or ')}`
+        );
         // Once a production baseline is configured, failure to read it is fatal.
         // Falling back to an older repository snapshot could lower a high-water
         // mark and let a degraded candidate replace the live deployment.
-        return await Promise.all([
-            fetchJsonWithRetry(`${BASELINE_URL}/publications.json`),
-            fetchJsonWithRetry(`${BASELINE_URL}/status.json`)
-        ]);
+        return await fetchBaselineWithFallback(BASELINE_URLS);
     }
 
     return await Promise.all([
