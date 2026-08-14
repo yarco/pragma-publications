@@ -48,6 +48,7 @@ test('a build failure is reported to /log with its reason and cause chain', asyn
 
     await fs.writeFile(reportPath, JSON.stringify({
         schemaVersion: 1,
+        buildUuid: 'build-789',
         stage: 'build',
         reason: 'generate threw',
         detail: 'TypeError: fetch failed <- Error: getaddrinfo EAI_AGAIN dblp.org [EAI_AGAIN]',
@@ -120,4 +121,51 @@ test('a missing ping URL is non-fatal for the same reason', async () => {
 
     assert.equal(result.code, 0);
     assert.match(result.stderr, /nothing reported/);
+});
+
+test('REGRESSION: a previous run\'s report is never attributed to this build', async t => {
+    const { server, received, port } = await captureOnePing();
+    t.after(() => server.close());
+    t.after(() => fs.rm(reportPath, { force: true }));
+
+    // Left behind by an earlier build in a reused workspace.
+    await fs.writeFile(reportPath, JSON.stringify({
+        schemaVersion: 1,
+        buildUuid: 'build-OLD',
+        stage: 'build',
+        reason: 'a completely different failure',
+        detail: 'stale detail that must not be reported',
+        failedAt: '2026-08-01T00:00:00.000Z'
+    }), 'utf8');
+
+    await runNotifier({
+        HEALTHCHECKS_PING_URL: `http://127.0.0.1:${port}/check`,
+        WORKERS_CI_BUILD_UUID: 'build-NEW'
+    }, ['build']);
+
+    assert.doesNotMatch(received.body, /a completely different failure/);
+    assert.doesNotMatch(received.body, /stale detail/);
+    assert.match(received.body, /no failure report written/);
+});
+
+test('the report is cleared after reporting so a later stage cannot inherit it', async t => {
+    const { server, port } = await captureOnePing();
+    t.after(() => server.close());
+    t.after(() => fs.rm(reportPath, { force: true }));
+
+    await fs.writeFile(reportPath, JSON.stringify({
+        schemaVersion: 1,
+        buildUuid: 'build-789',
+        stage: 'build',
+        reason: 'generate threw',
+        detail: null,
+        failedAt: '2026-08-14T04:24:05.000Z'
+    }), 'utf8');
+
+    await runNotifier({
+        HEALTHCHECKS_PING_URL: `http://127.0.0.1:${port}/check`,
+        WORKERS_CI_BUILD_UUID: 'build-789'
+    }, ['build']);
+
+    await assert.rejects(fs.access(reportPath), /ENOENT/);
 });

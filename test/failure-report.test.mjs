@@ -9,7 +9,8 @@ import {
     boundText,
     buildFailureReport,
     writeFailureReport,
-    readFailureReport
+    readFailureReport,
+    clearFailureReport
 } from '../lib/failure-report.mjs';
 
 test('the cause chain is unwrapped, not reduced to the outer message', () => {
@@ -90,4 +91,31 @@ test('a missing or corrupt report reads as null rather than throwing', async t =
     const corrupt = path.join(dir, 'corrupt.json');
     await fs.writeFile(corrupt, '{not json', 'utf8');
     assert.equal(await readFailureReport(corrupt), null);
+});
+
+test('a report from another build is ignored rather than misattributed', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pragma-failure-'));
+    const file = path.join(dir, 'report.json');
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+    // A previous run left its report behind in a reused workspace.
+    await writeFailureReport(
+        buildFailureReport({ stage: 'build', reason: 'stale run', buildUuid: 'build-OLD' }),
+        file
+    );
+
+    assert.equal(await readFailureReport(file, { buildUuid: 'build-NEW' }), null);
+    assert.equal((await readFailureReport(file, { buildUuid: 'build-OLD' }))?.reason, 'stale run');
+});
+
+test('clearing a report is idempotent and safe when absent', async t => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pragma-failure-'));
+    const file = path.join(dir, 'report.json');
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+    await writeFailureReport(buildFailureReport({ stage: 'build', reason: 'x' }), file);
+    await clearFailureReport(file);
+    await clearFailureReport(file);
+
+    assert.equal(await readFailureReport(file), null);
 });

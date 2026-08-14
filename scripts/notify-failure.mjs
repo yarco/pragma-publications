@@ -11,8 +11,12 @@
 // check's status or move its alert deadline, so reporting a failure here can
 // never trip — or defer — the three-strike alert policy.
 
-import { readFailureReport, boundText } from '../lib/failure-report.mjs';
-import { FAILURE_STAGES } from '../lib/config.mjs';
+import {
+    readFailureReport,
+    clearFailureReport,
+    boundText
+} from '../lib/failure-report.mjs';
+import { FAILURE_STAGES, MONITOR_PING_TIMEOUT_MS } from '../lib/config.mjs';
 
 const VALID_STAGES = new Set(Object.values(FAILURE_STAGES));
 
@@ -53,18 +57,26 @@ async function main() {
 
     try {
         // POST, not GET: a GET cannot carry the cause chain as a body.
+        // Bounded, for the same reason the success ping is.
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain; charset=utf-8' },
-            body
+            body,
+            signal: AbortSignal.timeout(MONITOR_PING_TIMEOUT_MS)
         });
         if (!response.ok) {
             throw new Error(`Healthchecks.io returned HTTP ${response.status}`);
         }
         console.error(`[failure] reported ${stage} failure to the monitor log`);
     } catch (error) {
-        console.error(`[failure] could not report failure: ${error.message}`);
+        const reason = error.name === 'TimeoutError'
+            ? `timed out after ${MONITOR_PING_TIMEOUT_MS}ms`
+            : error.message;
+        console.error(`[failure] could not report failure: ${reason}`);
     }
+
+    // The run is over either way; do not leave a report for the next one.
+    await clearFailureReport();
 }
 
 await main();

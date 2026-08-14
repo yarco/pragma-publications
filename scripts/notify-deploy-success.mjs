@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// Sends the ONLY status-changing ping the freshness check ever receives.
+// It runs after `wrangler deploy` has completed, so a success ping always means
+// a new version is live.
+
+import { MONITOR_PING_TIMEOUT_MS } from '../lib/config.mjs';
 
 const pingUrl = process.env.HEALTHCHECKS_PING_URL?.replace(/\/+$/, '');
 const buildUuid = process.env.WORKERS_CI_BUILD_UUID;
@@ -12,13 +17,21 @@ if (!pingUrl) {
 } else {
     const url = `${pingUrl}?rid=${encodeURIComponent(buildUuid)}`;
     try {
-        const response = await fetch(url, { method: 'GET' });
+        // Bounded: a hung monitor must not hold a completed deploy open until
+        // the build container's own 20-minute cap kills it.
+        const response = await fetch(url, {
+            method: 'GET',
+            signal: AbortSignal.timeout(MONITOR_PING_TIMEOUT_MS)
+        });
         if (!response.ok) {
             throw new Error(`Healthchecks.io returned HTTP ${response.status}`);
         }
         console.log(`[deploy] build ${buildUuid} deployed; success ping accepted`);
     } catch (error) {
-        console.error(`[deploy] success ping failed: ${error.message}`);
+        const reason = error.name === 'TimeoutError'
+            ? `timed out after ${MONITOR_PING_TIMEOUT_MS}ms`
+            : error.message;
+        console.error(`[deploy] success ping failed: ${reason}`);
         process.exitCode = 1;
     }
 }

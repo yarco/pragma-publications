@@ -135,6 +135,21 @@ computes the deadline as *(next scheduled time after the last ping) + grace*.
 Configuring an "every 8 hours" period check with the same grace yields a two-strike
 system instead of three.
 
+**Known limitation: an off-schedule success next to a slot can buy an extra strike.**
+If a success ping lands just *after* a slot time while that slot's own build is still
+in flight — realistically only when a manual re-run finishes in the minute after a
+cron fires — Healthchecks anchors the deadline on the *following* slot. Up to four
+attempts can then fail before the email, roughly 34 h after the last success instead
+of 26 h.
+
+This is accepted, not overlooked. It is bounded (the alert is late, never absent),
+and no single grace value fixes both cases: tolerating three failures normally
+requires grace > 16 h, while capping the race at three would require grace < 16 h.
+Closing it properly needs a stored attempt counter, whose own failure modes are worse
+— the counter must be incremented by the build container that just failed, and
+tolerated failures would need a keep-alive ping that asserts health while the system
+is failing, so any bug in it produces permanent silence instead of a late email.
+
 ### Never send `/start` to the freshness check
 
 Measured against the live Healthchecks API on 2026-08-14: with a 60-second grace, a

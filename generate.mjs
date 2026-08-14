@@ -19,6 +19,7 @@ import {
 } from './lib/baseline.mjs';
 import {
     buildFailureReport,
+    clearFailureReport,
     describeErrorChain,
     writeFailureReport
 } from './lib/failure-report.mjs';
@@ -63,6 +64,8 @@ async function readPrevious() {
 
 async function main() {
     const startedAt = Date.now();
+    // A reused workspace can still hold a previous run's report.
+    await clearFailureReport();
     const [previous, previousStatus] = await readPrevious();
     const priorBaseline = deriveBaseline(previous, previousStatus);
 

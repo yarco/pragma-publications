@@ -122,3 +122,22 @@ test('a missing heartbeat URL degrades quietly rather than failing the run', asy
         'https://hc.example/freshness/log?rid=build-456'
     ]);
 });
+
+test('a missing freshness URL degrades quietly rather than failing the run', async () => {
+    const partial = { ...env, HEALTHCHECKS_PING_URL: undefined };
+    const urls = [];
+
+    const uuid = await runDaily(partial, async (url, init) => {
+        urls.push(url);
+        if (url === partial.DEPLOY_HOOK_URL) {
+            return response(200, { result: { build_uuid: 'build-789' } });
+        }
+        return response(200);
+    });
+
+    assert.equal(uuid, 'build-789');
+    assert.deepEqual(urls, [
+        'https://builds.example/hook',
+        'https://hc.example/heartbeat?rid=build-789'
+    ]);
+});
