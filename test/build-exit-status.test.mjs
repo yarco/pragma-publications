@@ -17,6 +17,27 @@ import path from 'node:path';
 
 const FAILURE_BRANCH = '(node notify-stub.mjs; exit 1)';
 
+// The behavioural tests below run a fixture package.json, so on their own they
+// would keep passing if the real scripts ever drifted away from the shape they
+// prove safe. Pin the real strings too.
+test('the real build and deploy scripts still use the guarded failure branch', async () => {
+    const pkg = JSON.parse(await fs.readFile(path.resolve('package.json'), 'utf8'));
+
+    for (const [script, stage] of [['build', 'build'], ['deploy:production', 'deploy']]) {
+        const command = pkg.scripts[script];
+        assert.ok(command, `package.json must define ${script}`);
+        assert.ok(
+            command.includes(`|| (node scripts/notify-failure.mjs ${stage}; exit 1)`),
+            `${script} must report failure and then exit non-zero, got: ${command}`
+        );
+        // `&&` before exit 1 would let a crashing notifier swallow the failure.
+        assert.ok(
+            !command.includes('notify-failure.mjs') || !command.includes('&& exit 1'),
+            `${script} must use ';' not '&&' before exit 1, got: ${command}`
+        );
+    }
+});
+
 async function makeWorkspace(t, scripts) {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'pragma-build-exit-'));
     t.after(() => fs.rm(dir, { recursive: true, force: true }));
