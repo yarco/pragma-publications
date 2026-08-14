@@ -4,3 +4,4 @@ cache/
 .dev.vars
 .env
 .DS_Store
+.failure-report.json

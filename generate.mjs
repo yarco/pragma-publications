@@ -17,6 +17,12 @@ import {
     configuredBaselineUrls,
     fetchBaselineWithFallback
 } from './lib/baseline.mjs';
+import {
+    buildFailureReport,
+    describeErrorChain,
+    writeFailureReport
+} from './lib/failure-report.mjs';
+import { FAILURE_STAGES } from './lib/config.mjs';
 
 const OUT_DIR = 'dist';
 const OUT_SCRIPT = path.join(OUT_DIR, 'getPublications.js');
@@ -66,6 +72,13 @@ async function main() {
     if (!verdict.ok) {
         console.error(`[generate] PUBLISH GATE REJECTED: ${verdict.reason}`);
         console.error('[generate] leaving the previously published file untouched');
+        // A gate rejection is deterministic: retrying will not repair a scraper
+        // pinned to class names Google has reshuffled. It shares the tolerance
+        // window with transient faults, so name it precisely for triage.
+        await writeFailureReport(buildFailureReport({
+            stage: FAILURE_STAGES.BUILD,
+            reason: `publish gate rejected: ${verdict.reason}`
+        }));
         process.exitCode = 1;
         return;
     }
@@ -92,7 +105,15 @@ async function main() {
     );
 }
 
-main().catch(error => {
-    console.error(`[generate] failed: ${error.message}`);
+main().catch(async error => {
+    // Print the whole cause chain. `error.message` alone reduced the
+    // 2026-08-14 connection failure to a bare "fetch failed", which could not
+    // be told apart from a DNS failure without re-running the pipeline.
+    console.error(`[generate] failed: ${describeErrorChain(error)}`);
+    await writeFailureReport(buildFailureReport({
+        stage: FAILURE_STAGES.BUILD,
+        reason: 'generate threw',
+        error
+    }));
     process.exitCode = 1;
 });
