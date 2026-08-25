@@ -5,10 +5,10 @@
 //   FRESHNESS (HEALTHCHECKS_PING_URL)
 //     Answers "has a refresh succeeded recently?". Only a completed deployment
 //     may change its status. Everything else is a status-neutral `/log`.
-//     Its long grace window is what implements the strike-based alert policy,
-//     which only works if no failing run can move its deadline. Since
-//     2026-08-25 the cadence is one attempt a day with a 26h grace, so it
-//     pages after the second consecutive failed day.
+//     Its long grace window is what implements the three-strike alert policy,
+//     which only works if no failing run can move its deadline. Cadence is
+//     three attempts a day 8h apart with an 18h grace, so it pages after the
+//     third consecutive failed attempt.
 //
 //     Measured on the live API 2026-08-14: a second `/start` ping moves the
 //     alert deadline to (second start + grace). Repeated attempts against a
