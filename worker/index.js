@@ -22,9 +22,19 @@
 //     the build container and carries no matching `rid`. Healthchecks held
 //     that run open for eleven days: `started: true`, `next_ping` frozen at
 //     the 08-14 timestamp, `status: down`, while daily success pings kept
-//     arriving. A wedged check cannot report a real staleness event. If this
-//     state ever recurs, clear it by re-saving the check; do not assume a
-//     `down` freshness check with recent successes is a false alarm.
+//     arriving. A wedged check cannot report a real staleness event, so do not
+//     assume a `down` freshness check with recent successes is a false alarm.
+//
+//     To clear it: ping success with the STUCK RUN'S OWN rid —
+//     `GET https://hc-ping.com/<uuid>?rid=<rid of the orphaned /start>`. Find
+//     that rid in the ping log (`/api/v3/checks/<uuid>/pings/`, look for
+//     type `start`). Do this FIRST. Re-saving the check does not clear
+//     `started: true`; worse, editing `grace` while a run is stuck makes
+//     Healthchecks re-evaluate the frozen deadline and email a DOWN for an
+//     event days old. Measured 2026-08-25: the grace edit fired a ghost DOWN
+//     dated 2026-08-15, and only the rid ping actually unwedged it. If a
+//     schedule or grace edit is needed too, close the run first, or mute
+//     notifications before saving.
 //
 //   HEARTBEAT (HEARTBEAT_PING_URL)
 //     Answers "did the scheduler run and did Workers Builds accept the job?".
