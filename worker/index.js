@@ -5,14 +5,26 @@
 //   FRESHNESS (HEALTHCHECKS_PING_URL)
 //     Answers "has a refresh succeeded recently?". Only a completed deployment
 //     may change its status. Everything else is a status-neutral `/log`.
-//     Its long grace window is what implements the three-strike alert policy,
-//     which only works if no failing run can move its deadline.
+//     Its long grace window is what implements the strike-based alert policy,
+//     which only works if no failing run can move its deadline. Since
+//     2026-08-25 the cadence is one attempt a day with a 26h grace, so it
+//     pages after the second consecutive failed day.
 //
 //     Measured on the live API 2026-08-14: a second `/start` ping moves the
-//     alert deadline to (second start + grace). Three attempts a day against a
+//     alert deadline to (second start + grace). Repeated attempts against a
 //     multi-hour grace would therefore defer the alert indefinitely, so this
 //     Worker must never send `/start` to the freshness check. A `/log` ping was
 //     measured the same day to leave the deadline untouched.
+//
+//     A `/start` also does lasting damage, discovered 2026-08-25. The last one
+//     this Worker ever sent — 2026-08-14T04:23:24Z, carrying `rid=<buildUuid>`
+//     — opened a run that never closed, because the success ping comes from
+//     the build container and carries no matching `rid`. Healthchecks held
+//     that run open for eleven days: `started: true`, `next_ping` frozen at
+//     the 08-14 timestamp, `status: down`, while daily success pings kept
+//     arriving. A wedged check cannot report a real staleness event. If this
+//     state ever recurs, clear it by re-saving the check; do not assume a
+//     `down` freshness check with recent successes is a false alarm.
 //
 //   HEARTBEAT (HEARTBEAT_PING_URL)
 //     Answers "did the scheduler run and did Workers Builds accept the job?".

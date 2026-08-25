@@ -13,12 +13,20 @@
   "assets": {
     "directory": "./dist"
   },
-  // Three attempts a day, evenly spaced 8 hours apart. Even spacing is load
-  // bearing: the freshness check's grace window is derived from the interval
-  // (2 x 8h + margin), so uneven slots would silently change how many failures
-  // are tolerated before it alerts.
+  // One attempt a day. The publication data is DBLP pages merged onto a site;
+  // it may be stale and nothing downstream cares, so the old three-a-day
+  // cadence was buying retries, not freshness.
+  //
+  // The interval is still load bearing for alerting: the freshness check's
+  // grace is derived from it (1 x 24h + 2h margin = 26h), so it pages after
+  // the SECOND consecutive failed day. Change the interval and that grace has
+  // to change with it, or the check pages on a schedule it no longer matches.
+  //
+  // Keep this ONE cron expression. Cloudflare's free plan caps cron triggers
+  // at 5 per account and counts expressions, not firings — the three entries
+  // this replaced were consuming 3 of Primary's 5 for a single schedule.
   "triggers": {
-    "crons": ["23 4 * * *", "23 12 * * *", "23 20 * * *"]
+    "crons": ["23 4 * * *"]
   },
   "observability": {
     "enabled": true
