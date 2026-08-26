@@ -147,5 +147,11 @@ export async function runDaily(env, fetchImpl = fetch) {
 export default {
     async scheduled(_controller, env, ctx) {
         ctx.waitUntil(runDaily(env, fetch));
+    },
+
+    // Static Assets serves known files from ./dist. Unknown paths fall through
+    // here — without a controlled response, they throw Worker exceptions.
+    async fetch() {
+        return new Response(null, { status: 404 });
     }
 };

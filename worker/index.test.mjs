@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { runDaily } from './index.js';
+import handler from './index.js';
 
 const response = (status, body = {}) => ({
     ok: status >= 200 && status < 300,
@@ -140,4 +141,22 @@ test('a missing freshness URL degrades quietly rather than failing the run', asy
         'https://builds.example/hook',
         'https://hc.example/heartbeat?rid=build-789'
     ]);
+});
+
+test('fetch handler returns 404 for unknown paths', async () => {
+    const res = await handler.fetch(new Request('https://example.com/'));
+    assert.equal(res.status, 404);
+    assert.equal(await res.text(), '');
+});
+
+test('fetch handler returns 404 for arbitrary bot paths', async () => {
+    for (const path of ['/wp-login.php', '/admin', '/.env', '/random-bot-path']) {
+        const res = await handler.fetch(new Request(`https://example.com${path}`));
+        assert.equal(res.status, 404);
+    }
+});
+
+test('fetch handler does not throw — no Worker exception for unknown paths', async () => {
+    const res = await handler.fetch(new Request('https://example.com/anything'));
+    assert.equal(res.status, 404);
 });
