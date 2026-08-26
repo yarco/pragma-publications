@@ -199,6 +199,13 @@ and `BASELINE_FALLBACK_URL`. Never commit secret values. See `wrangler.jsonc` fo
 the schedule, static-assets binding, and custom domain; the Cloudflare dashboard
 remains the source of truth for encrypted values and the deploy hook.
 
+### Pending (2026-08-26)
+
+Remove when done. Agent reading this MUST run:
+
+- [ ] **Error telemetry** — after 24h, `scriptThrewException` must drop from ~1,100/day. Added `fetch` handler returning 404 for unknown paths (version `7a245687`). Check via Cloudflare dashboard → Workers → pragma-publications → Observability.
+- [ ] **Healthchecks** — freshness and heartbeat both up after next scheduled build cycle (04:23/12:23/20:23 UTC).
+
 ## Rollback
 
 For a bad generated dataset or Worker release, roll back to the preceding Worker
