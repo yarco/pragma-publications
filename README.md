@@ -100,10 +100,17 @@ build replaces them atomically; a failed build leaves the last good version live
 ### Schedule and alert policy
 
 The scheduled handler runs three times a day at `04:23`, `12:23` and `20:23` UTC.
-DBLP fails intermittently at the connection layer — twice in five runs during
-August 2026, both times in the `04:23` slot, and both times a manual retry hours
-later succeeded with unchanged code. One attempt a day turned a transient upstream
-blip into an alert; three attempts eight hours apart ride it out.
+DBLP fails transiently, in any slot, in more than one shape: bare `TypeError:
+fetch failed`, `SocketError: other side closed`, `503`, `504`. A later attempt
+with unchanged code succeeds. One attempt a day turned that into an alert; three
+attempts eight hours apart ride it out. A single failed slot needs no
+investigation — the next slot clears it.
+
+Tolerated failures are silent by design, so the `/log` body is the only record:
+`GET /api/v3/checks/<uuid>/pings/<n>/body`. A bodiless ping answers `404` with an
+HTML page — that is the API saying "no body", not a fault. The Worker's own
+breadcrumb is a GET and always reads that way; only `scripts/notify-failure.mjs`
+attaches a body.
 
 The policy is: **tolerate two consecutive failed attempts, alert on the third,
 any success resets.** Publications are not time critical, so roughly a day of
@@ -199,12 +206,19 @@ and `BASELINE_FALLBACK_URL`. Never commit secret values. See `wrangler.jsonc` fo
 the schedule, static-assets binding, and custom domain; the Cloudflare dashboard
 remains the source of truth for encrypted values and the deploy hook.
 
-### Pending (2026-08-26)
+### Unknown paths must return 404, not throw
 
-Remove when done. Agent reading this MUST run:
+Static Assets serves `dist/`; everything else falls through to the `fetch`
+handler. Without one, each of those requests is an uncaught exception —
+scanner traffic alone produced ~1,100 a day against ~12 real requests. The
+handler answers `404`, so `scriptThrewException` is a real signal here and any
+non-zero count is worth reading:
 
-- [ ] **Error telemetry** — after 24h, `scriptThrewException` must drop from ~1,100/day. Added `fetch` handler returning 404 for unknown paths (version `7a245687`). Check via Cloudflare dashboard → Workers → pragma-publications → Observability.
-- [ ] **Healthchecks** — freshness and heartbeat both up after next scheduled build cycle (04:23/12:23/20:23 UTC).
+```bash
+CF=$(security find-generic-password -s cloudflare -a 'yarcoh@gmail.com:operator-api-token' -w)
+curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $CF" \
+  -H "Content-Type: application/json" -d '{"query":"query{viewer{accounts(filter:{accountTag:\"b43256ec662caecc5ffa2e8315b465ef\"}){workersInvocationsAdaptive(limit:100, filter:{datetime_geq:\"<iso8601>\", datetime_lt:\"<iso8601>\", scriptName:\"pragma-publications\"}){dimensions{status}sum{requests errors}}}}}"}'
+```
 
 ## Rollback
 
