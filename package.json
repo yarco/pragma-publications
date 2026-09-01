@@ -8,8 +8,8 @@
     "generate": "node generate.mjs",
     "build": "(npm test && npm run generate) || (node scripts/notify-failure.mjs build; exit 1)",
     "test": "node --test test/*.test.mjs worker/*.test.mjs",
-    "deploy": "wrangler deploy",
-    "deploy:production": "(wrangler deploy && node scripts/notify-deploy-success.mjs) || (node scripts/notify-failure.mjs deploy; exit 1)"
+    "deploy": "node scripts/deploy-committed.mjs",
+    "deploy:production": "(node scripts/deploy-committed.mjs && node scripts/notify-deploy-success.mjs) || (node scripts/notify-failure.mjs deploy; exit 1)"
   },
   "dependencies": {
     "axios": "^1.7.9",

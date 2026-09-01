@@ -5,6 +5,13 @@ publishes it as a static JavaScript file. The production design needs no VPS:
 one Cloudflare Worker serves the static files, runs the daily schedule, and
 triggers a Git-connected Workers Build of its next version.
 
+Cross-project production policy lives in the sibling
+[`cloudflare-fleet`](../cloudflare-fleet/README.md) repository. The vault's
+`AI/Coding/Cloudflare.md` owns fleet topology and decisions; this README owns
+Pragma-specific builds, data gates, recovery, and rollback. Workers Builds is
+the production deploy path; the fleet auditor independently proves its checked-
+out Git source, live Worker bundle, Cron, observability, and Healthchecks state.
+
 The source repository is public, but GitHub Actions is deliberately not the
 scheduler. GitHub documents that public-repository schedules can be silently
 disabled after 60 days without repository activity; this project may legitimately
@@ -49,6 +56,9 @@ that would otherwise be stopped by the publish gate.
 4. The deploy command sends the freshness success ping only after `wrangler
    deploy` finishes. A failed generation/build/deploy never sends success, so the
    freshness check alerts once three consecutive attempts have missed.
+5. The committed deploy helper refuses a dirty, off-`main`, or unpushed checkout,
+   enables Wrangler strict mode, and stamps the exact Git SHA into Cloudflare's
+   immutable version metadata.
 
 This is one production runtime, one source repository, and two external dead-man
 alarms. Static asset requests are free and unlimited; the three daily crons and
