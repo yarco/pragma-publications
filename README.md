@@ -36,10 +36,13 @@ Requires Node.js 22.
 
 ```bash
 npm ci
-npm test
-npm run generate
 npm run deploy
 ```
+
+The manual deploy command runs the complete test and generation build before
+the committed-source deployment helper; there is no supported stale-`dist`
+shortcut. Workers Builds already invokes `npm run build` before its separate
+`npm run deploy:production` command, so it does not build twice.
 
 `ALLOW_SHRINK=1 npm run generate` explicitly accepts a real dataset contraction
 that would otherwise be stopped by the publish gate.
@@ -68,7 +71,7 @@ VPS, or GitHub Actions minutes are used.
 
 ## Bootstrap
 
-1. Deploy the committed `dist/` snapshot once with `npm run deploy`.
+1. Generate, test, and deploy the initial `dist/` snapshot with `npm run deploy`.
 2. Connect the Worker to the public GitHub repository in Workers Builds.
 3. Use build command `npm run build`; set deploy command to
    `npm run deploy:production`.

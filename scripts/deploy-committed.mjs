@@ -8,6 +8,8 @@ function git(...args) {
   return execFileSync("git", args, {
     encoding: "utf8",
     maxBuffer: 16 * 1024 * 1024,
+    timeout: 30_000,
+    killSignal: "SIGTERM",
   }).trim();
 }
 
@@ -35,7 +37,8 @@ const result = spawnSync(
     "--message",
     `${origin}@${head} (${branch}, Workers Builds)`,
   ],
-  { stdio: "inherit" },
+  { stdio: "inherit", timeout: 5 * 60 * 1000, killSignal: "SIGTERM" },
 );
+if (result.error) throw new Error(`wrangler deploy failed: ${result.error.message}`);
 if (result.status !== 0) throw new Error(`wrangler deploy failed with exit ${result.status}`);
 console.log(`DEPLOYED pragma-publications from pushed commit ${head}`);
