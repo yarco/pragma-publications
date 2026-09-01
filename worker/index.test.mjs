@@ -7,7 +7,8 @@ import handler from './index.js';
 const response = (status, body = {}) => ({
     ok: status >= 200 && status < 300,
     status,
-    async json() { return body; }
+    async json() { return body; },
+    async text() { return JSON.stringify(body); }
 });
 
 const env = {
@@ -159,4 +160,59 @@ test('fetch handler returns 404 for arbitrary bot paths', async () => {
 test('fetch handler does not throw — no Worker exception for unknown paths', async () => {
     const res = await handler.fetch(new Request('https://example.com/anything'));
     assert.equal(res.status, 404);
+});
+
+test('recovery re-arms a stale trigger and runs one catch-up build', async () => {
+    const requests = [];
+    const recoveryEnv = {
+        ...env,
+        RECOVERY_TOKEN: 'recovery-secret',
+        CLOUDFLARE_SCHEDULE_TOKEN: 'schedule-secret'
+    };
+    const scheduleUrl = 'https://api.cloudflare.com/client/v4/accounts/b43256ec662caecc5ffa2e8315b465ef/workers/scripts/pragma-publications/schedules';
+    const { recover } = await import('./index.js');
+    const uuid = await recover(recoveryEnv, async (url, init) => {
+        requests.push([url, init.method]);
+        if (url === scheduleUrl && init.method === 'PUT') return response(200, {
+            success: true, result: { schedules: [{ cron: '23 4,12,20 * * *' }] }
+        });
+        if (url === scheduleUrl) return response(200, {
+            success: true, result: { schedules: [] }
+        });
+        if (url === env.DEPLOY_HOOK_URL) return response(200, { result: { build_uuid: 'recovery-123' } });
+        return response(200);
+    });
+    assert.equal(uuid, 'recovery-123');
+    assert.deepEqual(requests, [
+        [scheduleUrl, undefined],
+        [scheduleUrl, 'PUT'],
+        [env.DEPLOY_HOOK_URL, 'POST'],
+        ['https://hc.example/heartbeat?rid=recovery-123', 'GET'],
+        ['https://hc.example/freshness/log?rid=recovery-123', 'GET']
+    ]);
+});
+
+test('recovery does not rewrite a recently propagated correct trigger', async () => {
+    const { rearmCron } = await import('./index.js');
+    const scheduleUrl = 'https://api.cloudflare.com/client/v4/accounts/b43256ec662caecc5ffa2e8315b465ef/workers/scripts/pragma-publications/schedules';
+    const modified = new Date(1_000_000).toISOString();
+    const calls = [];
+    const changed = await rearmCron({ CLOUDFLARE_SCHEDULE_TOKEN: 'schedule-secret' }, async (url, init) => {
+        calls.push([url, init.method]);
+        return response(200, { success: true, result: { schedules: [{
+            cron: '23 4,12,20 * * *', modified_on: modified
+        }] } });
+    }, 1_000_000 + 5_000);
+    assert.equal(changed, false);
+    assert.deepEqual(calls, [[scheduleUrl, undefined]]);
+});
+
+test('recovery route conceals missing or wrong credentials', async () => {
+    const recoveryEnv = { RECOVERY_TOKEN: 'recovery-secret' };
+    for (const headers of [{}, { authorization: 'Bearer wrong' }]) {
+        const res = await handler.fetch(new Request('https://example.com/recover', {
+            method: 'POST', headers
+        }), recoveryEnv);
+        assert.equal(res.status, 404);
+    }
 });

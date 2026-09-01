@@ -76,6 +76,14 @@ VPS, or GitHub Actions minutes are used.
    Both hostnames serve the same deployment; the second path prevents a transient
    hostname failure from aborting the refresh. Workers Builds supplies
    `WORKERS_CI_BUILD_UUID` automatically.
+7. Store separate runtime secrets `RECOVERY_TOKEN` and
+   `CLOUDFLARE_SCHEDULE_TOKEN`. The latter needs only permission to update this
+   Worker's Cron Trigger. Create a dedicated Healthchecks webhook named
+   `pragma-publications-scheduler-recovery`: on DOWN only, POST to
+   `https://pragma-publications.pragma-publications.workers.dev/recover` with
+   `Authorization: Bearer <RECOVERY_TOKEN>` and a browser `User-Agent`. Assign
+   it only to the scheduler heartbeat check. Do not configure an UP request,
+   attach it to the freshness check, or reuse another project's recovery hook.
 
 Every build after bootstrap gates against the currently published data and
 high-water marks. A configured remote baseline is fail-closed: if it cannot be
@@ -126,6 +134,21 @@ Two Healthchecks.io checks implement this, with deliberately different jobs.
 | Grace | **18 h** | 30 min |
 | Success ping | only after `wrangler deploy` completes | immediately after the deploy hook returns a build UUID |
 | Failure ping | `/log` only — never status changing | `/fail` when the hook is unreachable |
+
+### Scheduler recovery
+
+`POST /recover` is a concealed DOWN-only recovery hook for the heartbeat check.
+It accepts a separate constant-time bearer token, restores exactly the configured
+`23 4,12,20 * * *` trigger through Cloudflare's schedules API, and queues one
+catch-up Workers Build through the existing deploy hook. A recently modified
+correct trigger is left untouched for 15 minutes so webhook retries cannot keep
+restarting Cloudflare's propagation window. The deploy hook has a 30-second
+timeout, and any recovery failure returns non-2xx so Healthchecks can retry.
+
+This webhook must not be enabled on the freshness check. A freshness DOWN means
+three publication builds failed; another automatic build may only hammer the same
+DBLP or scraper fault. The heartbeat check is the one that diagnoses a missing
+Cron delivery and can therefore be repaired by re-arming the trigger.
 
 **Why 18 hours.** Slots are eight hours apart, so the third consecutive failure
 lands 16 h after the first missed slot. Grace must exceed 16 h to reach the third
@@ -200,8 +223,9 @@ curl -fsSI https://redesignmypage.com/getPublications.js
 npx wrangler deployments status
 ```
 
-Runtime secrets are `DEPLOY_HOOK_URL`, `HEALTHCHECKS_PING_URL` and
-`HEARTBEAT_PING_URL`. Workers Builds has the secret `HEALTHCHECKS_PING_URL` and the plaintext variables `BASELINE_URL`
+Runtime secrets are `DEPLOY_HOOK_URL`, `HEALTHCHECKS_PING_URL`,
+`HEARTBEAT_PING_URL`, `RECOVERY_TOKEN`, and `CLOUDFLARE_SCHEDULE_TOKEN`.
+Workers Builds has the secret `HEALTHCHECKS_PING_URL` and the plaintext variables `BASELINE_URL`
 and `BASELINE_FALLBACK_URL`. Never commit secret values. See `wrangler.jsonc` for
 the schedule, static-assets binding, and custom domain; the Cloudflare dashboard
 remains the source of truth for encrypted values and the deploy hook.

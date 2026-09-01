@@ -44,6 +44,14 @@
 
 const normalizeBase = value => value?.replace(/\/+$/, '') || null;
 
+const ACCOUNT_ID = 'b43256ec662caecc5ffa2e8315b465ef';
+const SCRIPT_NAME = 'pragma-publications';
+const CRON = '23 4,12,20 * * *';
+const SCHEDULES_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/schedules`;
+const SCHEDULE_PROPAGATION_MS = 15 * 60 * 1000;
+const CLOCK_SKEW_MS = 60 * 1000;
+const DEPLOY_HOOK_TIMEOUT_MS = 30_000;
+
 export const freshnessBase = env => normalizeBase(env.HEALTHCHECKS_PING_URL);
 export const heartbeatBase = env => normalizeBase(env.HEARTBEAT_PING_URL);
 
@@ -86,7 +94,10 @@ export async function triggerBuild(env, fetchImpl = fetch) {
         throw new Error('DEPLOY_HOOK_URL is not configured');
     }
 
-    const response = await fetchImpl(env.DEPLOY_HOOK_URL, { method: 'POST' });
+    const response = await fetchImpl(env.DEPLOY_HOOK_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(DEPLOY_HOOK_TIMEOUT_MS)
+    });
     if (!response.ok) {
         throw new Error(`Workers deploy hook returned HTTP ${response.status}`);
     }
@@ -101,6 +112,70 @@ export async function triggerBuild(env, fetchImpl = fetch) {
         `[scheduler] Workers build ${buildUuid} accepted with HTTP ${response.status}`
     );
     return buildUuid;
+}
+
+async function authorized(req, env) {
+    const supplied = req.headers.get('authorization')?.match(/^Bearer[ \t]+(.+)$/i)?.[1];
+    if (!supplied || !env.RECOVERY_TOKEN) return false;
+    const encoder = new TextEncoder();
+    const [left, right] = await Promise.all([
+        crypto.subtle.digest('SHA-256', encoder.encode(supplied)),
+        crypto.subtle.digest('SHA-256', encoder.encode(env.RECOVERY_TOKEN))
+    ]);
+    const a = new Uint8Array(left);
+    const b = new Uint8Array(right);
+    let diff = 0;
+    for (let i = 0; i < a.length; i += 1) diff |= a[i] ^ b[i];
+    return diff === 0;
+}
+
+async function parseScheduleResponse(response) {
+    const text = await response.text();
+    try { return JSON.parse(text); } catch { return null; }
+}
+
+/** Re-register the exact trigger after a missed Cloudflare Cron delivery.
+ * Healthchecks calls /recover only after the heartbeat turns DOWN. Avoid
+ * rewriting a recently changed trigger: Cloudflare documents up to 15 minutes
+ * of propagation, and repeated PUTs would continually restart that window. */
+export async function rearmCron(env, fetchImpl = fetch, now = Date.now()) {
+    if (!env.CLOUDFLARE_SCHEDULE_TOKEN) throw new Error('CLOUDFLARE_SCHEDULE_TOKEN is not configured');
+    const headers = { authorization: `Bearer ${env.CLOUDFLARE_SCHEDULE_TOKEN}` };
+    try {
+        const currentResponse = await fetchImpl(SCHEDULES_URL, { headers });
+        const current = await parseScheduleResponse(currentResponse);
+        const schedules = current?.result?.schedules ?? [];
+        const modified = Date.parse(schedules[0]?.modified_on ?? '');
+        const age = now - modified;
+        if (currentResponse.ok && current?.success === true
+            && schedules.length === 1 && schedules[0]?.cron === CRON
+            && Number.isFinite(modified) && age >= -CLOCK_SKEW_MS
+            && age < SCHEDULE_PROPAGATION_MS) return false;
+    } catch {
+        // Inspection is an optimization. If it fails, the PUT below can still
+        // restore a missing or malformed trigger.
+    }
+    const response = await fetchImpl(SCHEDULES_URL, {
+        method: 'PUT',
+        headers: { ...headers, 'content-type': 'application/json' },
+        body: JSON.stringify([{ cron: CRON }])
+    });
+    const result = await parseScheduleResponse(response);
+    const schedules = result?.result?.schedules ?? [];
+    if (!response.ok || result?.success !== true
+        || schedules.length !== 1 || schedules[0]?.cron !== CRON) {
+        const code = result?.errors?.[0]?.code;
+        throw new Error(`cron re-arm rejected: HTTP ${response.status}${code ? ` code ${code}` : ''}`);
+    }
+    return true;
+}
+
+/** Healthchecks DOWN webhook. Repair the clock and run one bounded catch-up.
+ * The deploy hook/build gate make a repeated same-commit build safe; returning
+ * non-2xx on hook failure lets Healthchecks retry the recovery webhook. */
+export async function recover(env, fetchImpl = fetch) {
+    await rearmCron(env, fetchImpl);
+    return runDaily(env, fetchImpl);
 }
 
 export async function runDaily(env, fetchImpl = fetch) {
@@ -151,7 +226,20 @@ export default {
 
     // Static Assets serves known files from ./dist. Unknown paths fall through
     // here — without a controlled response, they throw Worker exceptions.
-    async fetch() {
+    async fetch(request, env) {
+        const url = new URL(request.url);
+        if (url.pathname === '/recover') {
+            if (request.method !== 'POST' || !(await authorized(request, env))) {
+                return new Response('not found\n', { status: 404 });
+            }
+            try {
+                const buildUuid = await recover(env);
+                return Response.json({ recovered: true, cron: CRON, build: buildUuid });
+            } catch (error) {
+                console.error(`[scheduler] recovery failed: ${error.message}`);
+                return Response.json({ recovered: false, error: error.message }, { status: 502 });
+            }
+        }
         return new Response(null, { status: 404 });
     }
 };
