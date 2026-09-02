@@ -3,6 +3,11 @@
 import { execFileSync, spawnSync } from "node:child_process";
 
 const productionBranch = "main";
+const generatedPaths = [
+  "dist/getPublications.js",
+  "dist/publications.json",
+  "dist/status.json",
+];
 
 function git(...args) {
   return execFileSync("git", args, {
@@ -15,13 +20,20 @@ function git(...args) {
 
 const branch = git("symbolic-ref", "--quiet", "--short", "HEAD");
 const head = git("rev-parse", "HEAD");
-const status = git("status", "--porcelain", "--untracked-files=all");
+const status = git(
+  "status",
+  "--porcelain",
+  "--untracked-files=all",
+  "--",
+  ".",
+  ...generatedPaths.map((path) => `:(exclude)${path}`),
+);
 const remoteHead = git("ls-remote", "--exit-code", "origin", `refs/heads/${productionBranch}`).split(/\s+/)[0];
 
 if (branch !== productionBranch) {
   throw new Error(`refusing deploy from ${branch}; production is ${productionBranch}`);
 }
-if (status) throw new Error(`refusing deploy from a dirty working tree:\n${status}`);
+if (status) throw new Error(`refusing deploy with source or unexpected asset changes:\n${status}`);
 if (head !== remoteHead) {
   throw new Error(`refusing unpushed or stale source: HEAD ${head} != origin/${productionBranch} ${remoteHead}`);
 }

@@ -59,9 +59,10 @@ that would otherwise be stopped by the publish gate.
 4. The deploy command sends the freshness success ping only after `wrangler
    deploy` finishes. A failed generation/build/deploy never sends success, so the
    freshness check alerts once three consecutive attempts have missed.
-5. The committed deploy helper refuses a dirty, off-`main`, or unpushed checkout,
-   enables Wrangler strict mode, and stamps the exact Git SHA into Cloudflare's
-   immutable version metadata.
+5. The committed deploy helper permits only the three outputs freshly generated
+   under `dist/`; it refuses source changes, unexpected assets, an off-`main`
+   checkout, or an unpushed commit. It also enables Wrangler strict mode and stamps
+   the exact Git SHA into Cloudflare's immutable version metadata.
 
 This is one production runtime, one source repository, and two external dead-man
 alarms. Static asset requests are free and unlimited; the three daily crons and
