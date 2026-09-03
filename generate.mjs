@@ -23,43 +23,34 @@ import {
     describeErrorChain,
     writeFailureReport
 } from './lib/failure-report.mjs';
-import { FAILURE_STAGES } from './lib/config.mjs';
+import {
+    ALLOW_SHRINK,
+    DEFAULT_BASELINE_URLS,
+    FAILURE_STAGES
+} from './lib/config.mjs';
 
 const OUT_DIR = 'dist';
 const OUT_SCRIPT = path.join(OUT_DIR, 'getPublications.js');
 const OUT_DATA = path.join(OUT_DIR, 'publications.json');
 const OUT_STATUS = path.join(OUT_DIR, 'status.json');
-const BASELINE_URLS = configuredBaselineUrls();
+const envBaselineUrls = configuredBaselineUrls();
+const BASELINE_URLS = envBaselineUrls.length ? envBaselineUrls : DEFAULT_BASELINE_URLS;
 const SOURCE = process.env.PUBLICATION_SOURCE
     || (process.env.WORKERS_CI ? 'cloudflare-worker' : 'local');
 
-async function readJson(file) {
-    try {
-        const raw = await fs.readFile(file, 'utf8');
-        return JSON.parse(raw);
-    } catch (error) {
-        if (error.code !== 'ENOENT') {
-            console.warn(`[generate] could not read ${file}: ${error.message}`);
-        }
-        return null;
-    }
-}
-
 async function readPrevious() {
-    if (BASELINE_URLS.length) {
-        console.log(
-            `[generate] loading publish-gate baseline from ${BASELINE_URLS.join(' or ')}`
-        );
-        // Once a production baseline is configured, failure to read it is fatal.
-        // Falling back to an older repository snapshot could lower a high-water
-        // mark and let a degraded candidate replace the live deployment.
-        return await fetchBaselineWithFallback(BASELINE_URLS);
+    if (ALLOW_SHRINK) {
+        console.log('[generate] ALLOW_SHRINK=1: publishing without consulting a baseline');
+        return [null, null];
     }
 
-    return await Promise.all([
-        readJson(OUT_DATA),
-        readJson(OUT_STATUS)
-    ]);
+    console.log(
+        `[generate] loading publish-gate baseline from ${BASELINE_URLS.join(' or ')}`
+    );
+    // Failure to read the live deployment is fatal. Falling back to any local
+    // snapshot could lower a high-water mark and let a degraded candidate
+    // replace the live deployment.
+    return await fetchBaselineWithFallback(BASELINE_URLS);
 }
 
 async function main() {

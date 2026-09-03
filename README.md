@@ -44,8 +44,17 @@ the committed-source deployment helper; there is no supported stale-`dist`
 shortcut. Workers Builds already invokes `npm run build` before its separate
 `npm run deploy:production` command, so it does not build twice.
 
+Every build, local or in Workers Builds, gates against the same thing: the data
+currently published on the live deployment. `BASELINE_URL` and
+`BASELINE_FALLBACK_URL` override the baseline hostnames; unset — a local run —
+they default to the same two production origins. The baseline is fail-closed:
+if it cannot be read, nothing is published.
+
 `ALLOW_SHRINK=1 npm run generate` explicitly accepts a real dataset contraction
-that would otherwise be stopped by the publish gate.
+that would otherwise be stopped by the publish gate. It also skips the baseline
+fetch entirely — the candidate publishes on its own authority and the
+high-water marks restart from its values. That is the bootstrap path for a
+first deployment, when nothing is published yet.
 
 ## Free production architecture
 
@@ -59,10 +68,12 @@ that would otherwise be stopped by the publish gate.
 4. The deploy command sends the freshness success ping only after `wrangler
    deploy` finishes. A failed generation/build/deploy never sends success, so the
    freshness check alerts once three consecutive attempts have missed.
-5. The committed deploy helper permits only the three outputs freshly generated
-   under `dist/`; it refuses source changes, unexpected assets, an off-`main`
-   checkout, or an unpushed commit. It also enables Wrangler strict mode and stamps
-   the exact Git SHA into Cloudflare's immutable version metadata.
+5. The committed deploy helper refuses any working-tree change, an off-`main`
+   checkout, or an unpushed commit. The three generated `dist/` outputs are
+   gitignored, so a fresh build never dirties the tree, while anything else
+   appearing under `dist/` is an untracked file and blocks the deploy. The
+   helper also enables Wrangler strict mode and stamps the exact Git SHA into
+   Cloudflare's immutable version metadata.
 
 This is one production runtime, one source repository, and two external dead-man
 alarms. Static asset requests are free and unlimited; the three daily crons and
@@ -72,7 +83,10 @@ VPS, or GitHub Actions minutes are used.
 
 ## Bootstrap
 
-1. Generate, test, and deploy the initial `dist/` snapshot with `npm run deploy`.
+1. Generate, test, and deploy the initial snapshot with
+   `ALLOW_SHRINK=1 npm run deploy`. The flag publishes without consulting a
+   baseline, which is exactly what a first deployment needs: nothing is
+   published yet to compare against.
 2. Connect the Worker to the public GitHub repository in Workers Builds.
 3. Use build command `npm run build`; set deploy command to
    `npm run deploy:production`.
@@ -100,8 +114,8 @@ VPS, or GitHub Actions minutes are used.
    attach it to the freshness check, or reuse another project's recovery hook.
 
 Every build after bootstrap gates against the currently published data and
-high-water marks. A configured remote baseline is fail-closed: if it cannot be
-read, the build does not publish.
+high-water marks on the live deployment. The remote baseline is fail-closed:
+if it cannot be read, the build does not publish.
 
 ## Production endpoints
 
