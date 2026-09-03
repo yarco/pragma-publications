@@ -5,11 +5,6 @@ import { writeFailureReport, buildFailureReport } from "../lib/failure-report.mj
 import { FAILURE_STAGES } from "../lib/config.mjs";
 
 const productionBranch = "main";
-const generatedPaths = [
-  "dist/getPublications.js",
-  "dist/publications.json",
-  "dist/status.json",
-];
 
 function git(...args) {
   return execFileSync("git", args, {
@@ -33,14 +28,7 @@ async function main() {
     throw new Error("Could not determine HEAD (WORKERS_CI_COMMIT_SHA is empty or rev-parse failed)");
   }
 
-  const status = git(
-    "status",
-    "--porcelain",
-    "--untracked-files=all",
-    "--",
-    ".",
-    ...generatedPaths.map((path) => `:(exclude)${path}`),
-  );
+  const status = git("status", "--porcelain", "--untracked-files=all");
 
   let remoteHead = head;
   if (!isCI) {

@@ -26,6 +26,13 @@ async function makeDeployRepo(t) {
   git(repo, "config", "user.name", "Pragma test");
   git(repo, "config", "user.email", "pragma-test@example.invalid");
   await fs.mkdir(path.join(repo, "dist"));
+  // Mirror the repository: the three generated artifacts are gitignored, so
+  // they can never dirty the tree, while any other file under dist/ stays
+  // visible to `git status` and blocks the deploy.
+  await fs.writeFile(
+    path.join(repo, ".gitignore"),
+    "dist/getPublications.js\ndist/publications.json\ndist/status.json\n",
+  );
   await Promise.all([
     fs.writeFile(path.join(repo, "source.mjs"), "export const value = 1;\n"),
     fs.writeFile(path.join(repo, "dist/getPublications.js"), "old js\n"),
@@ -52,7 +59,7 @@ function runDeploy(repo, bin) {
   });
 }
 
-test("deploy permits the three generated artifacts to differ from Git", async (t) => {
+test("ignored generated artifacts do not block deploy", async (t) => {
   const { repo, bin } = await makeDeployRepo(t);
   await fs.writeFile(path.join(repo, "dist/getPublications.js"), "fresh js\n");
   await fs.writeFile(path.join(repo, "dist/status.json"), '{"fresh":true}\n');

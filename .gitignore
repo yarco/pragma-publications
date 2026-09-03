@@ -5,3 +5,8 @@ cache/
 .env
 .DS_Store
 .failure-report.json
+# Generated build outputs. Anything else appearing under dist/ stays visible
+# to git and therefore blocks the deploy gate as an unexpected asset.
+/dist/getPublications.js
+/dist/publications.json
+/dist/status.json
