@@ -135,9 +135,14 @@ async function parseScheduleResponse(response) {
 }
 
 /** Re-register the exact trigger after a missed Cloudflare Cron delivery.
- * Healthchecks calls /recover only after the heartbeat turns DOWN. Avoid
- * rewriting a recently changed trigger: Cloudflare documents up to 15 minutes
- * of propagation, and repeated PUTs would continually restart that window. */
+ * Healthchecks calls /recover only after the heartbeat turns DOWN. Skip the
+ * PUT when the trigger was written in the last 15 minutes: every deploy
+ * re-applies triggers.crons, so a fresh modified_on means a deployment just
+ * rewrote the configured trigger and Cloudflare's documented propagation
+ * window is still running — another PUT would only restart that window.
+ * (Consequence: a push build landing inside that window makes the first
+ * /recover skip its re-arm. The recovery's own catch-up build re-applies
+ * the trigger on deploy, so the skip cannot strand a dead trigger.) */
 export async function rearmCron(env, fetchImpl = fetch, now = Date.now()) {
     if (!env.CLOUDFLARE_SCHEDULE_TOKEN) throw new Error('CLOUDFLARE_SCHEDULE_TOKEN is not configured');
     const headers = { authorization: `Bearer ${env.CLOUDFLARE_SCHEDULE_TOKEN}` };
