@@ -184,7 +184,10 @@ If a success ping lands just *after* a slot time while that slot's own build is 
 in flight — realistically only when a manual re-run finishes in the minute after a
 cron fires — Healthchecks anchors the deadline on the *following* slot. Up to four
 attempts can then fail before the email, roughly 34 h after the last success instead
-of 26 h.
+of 26 h. Push-triggered Builds are the other source of off-grid success pings: every
+push to `main` builds and deploys, and only deploy-hook runs can heartbeat, so a
+push-deployed success moves the freshness deadline without proving anything about
+cron delivery — the heartbeat check alone answers that question.
 
 This is accepted, not overlooked. It is bounded (the alert is late, never absent),
 and no single grace value fixes both cases: tolerating three failures normally
@@ -227,6 +230,17 @@ the site stays correct either way — but it means the `/log` reason is what
 distinguishes "DBLP blipped" from "the scraper is broken" at triage time. If a
 stuck scraper should page sooner, give gate rejections their own check rather than
 shortening the freshness grace.
+
+One failure class produces no `/log` body at all: a build killed at Cloudflare's
+platform layer before any repository command runs. Observed 2026-09-03 12:23 UTC
+as `Build initialization failed: unable to verify Worker`, outcome `terminated`
+after five minutes. Both `||` reporting branches live inside the build container,
+so such a slot leaves only a bodiless freshness `/log` next to its heartbeat
+success and no new deployment. That shape — heartbeat UP, bodiless `/log`, no
+deployment — means read the Workers Builds record: the build UUID is the pings'
+`rid`, and `GET /accounts/<account>/builds/builds/<rid>` (plus its `/logs`
+endpoint) carries the platform's own failure line. The build list is the third
+evidence source, after the two ping streams.
 
 Useful checks:
 
