@@ -21,8 +21,8 @@
   // array entries this replaced were spending 3 of Primary's 5 slots on a
   // single schedule. Writing the hours as a list costs one slot.
   //
-  // The three firings are retries, not freshness — the data is DBLP pages
-  // merged onto a site and may be stale. They exist so a transient Workers
+  // The three firings are retries, not freshness — the data is DBLP SPARQL
+  // merged onto a site and may be a day behind. They exist so a transient Workers
   // Builds failure is retried the same day instead of leaving the site on its
   // last-good snapshot until tomorrow. They are free under the expression
   // rule above, so do not trade them away to save quota.

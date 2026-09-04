@@ -19,8 +19,8 @@ go months without a source change.
 
 ## Why it is static
 
-The source data changes only occasionally, while DBLP is slow and intermittently
-unavailable. A scheduled build fetches the three DBLP profiles and the selected-
+The source data changes only occasionally. A scheduled build queries DBLP's
+daily-synced SPARQL endpoint for the three author PIDs, fetches the selected-
 publications page once, applies a retention gate, then publishes:
 
 - `dist/getPublications.js` — browser payload used by the Webflow embed
@@ -136,11 +136,12 @@ build replaces them atomically; a failed build leaves the last good version live
 ### Schedule and alert policy
 
 The scheduled handler runs three times a day at `04:23`, `12:23` and `20:23` UTC.
-DBLP fails transiently, in any slot, in more than one shape: bare `TypeError:
-fetch failed`, `SocketError: other side closed`, `503`, `504`. A later attempt
-with unchanged code succeeds. One attempt a day turned that into an alert; three
-attempts eight hours apart ride it out. A single failed slot needs no
-investigation — the next slot clears it.
+DBLP's HTML/XML frontend has failed for hours at a time (`503` on every
+`/pid/{pid}.xml` mirror). The pipeline therefore reads DBLP through SPARQL
+(`https://sparql.dblp.org/sparql`), which is a separate daily-synced service
+and is enough freshness for a static snapshot. SPARQL can still fail
+(`429`, `5xx`, connection errors); three attempts eight hours apart ride that
+out. A single failed slot needs no investigation — the next slot clears it.
 
 Tolerated failures are silent by design, so the `/log` body is the only record:
 `GET /api/v3/checks/<uuid>/pings/<n>/body`. A bodiless ping answers `404` with an
@@ -175,7 +176,7 @@ timeout, and any recovery failure returns non-2xx so Healthchecks can retry.
 
 This webhook must not be enabled on the freshness check. A freshness DOWN means
 three publication builds failed; another automatic build may only hammer the same
-DBLP or scraper fault. The heartbeat check is the one that diagnoses a missing
+SPARQL or scraper fault. The heartbeat check is the one that diagnoses a missing
 Cron delivery and can therefore be repaired by re-arming the trigger.
 
 **Why 18 hours.** Slots are eight hours apart, so the third consecutive failure
@@ -241,7 +242,7 @@ connection reset. `lib/failure-report.mjs` now unwraps the chain to the real err
 A publish-gate rejection is deterministic and will not repair itself on retry, yet
 it shares the three-strike tolerance with transient faults. That is intentional —
 the site stays correct either way — but it means the `/log` reason is what
-distinguishes "DBLP blipped" from "the scraper is broken" at triage time. If a
+distinguishes "SPARQL blipped" from "the scraper is broken" at triage time. If a
 stuck scraper should page sooner, give gate rejections their own check rather than
 shortening the freshness grace.
 
