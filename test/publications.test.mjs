@@ -51,6 +51,17 @@ test('cleanAuthorName strips trailing DBLP disambiguation integers', () => {
     assert.equal(cleanAuthorName('Youngjae Kim 2'), 'Youngjae Kim');
 });
 
+test('DBLP_PROFILES names are the SPARQL identities for those PIDs', () => {
+    assert.deepEqual(
+        DBLP_PROFILES.map(p => `${p.pid} ${p.name}`),
+        [
+            '163/1540 Youngseok Yang',
+            '88/10578 Yaroslav Hayduk',
+            '09/2790 Myeongjae Jeon'
+        ]
+    );
+});
+
 test('buildSparqlQuery asks SPARQL for the XML-equivalent publication types', () => {
     const query = buildSparqlQuery();
     for (const profile of DBLP_PROFILES) {
