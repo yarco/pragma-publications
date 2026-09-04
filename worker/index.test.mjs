@@ -37,7 +37,7 @@ test('a queued build heartbeats and logs, but never changes freshness status', a
 
 test('REGRESSION: no /start is ever sent to the freshness check', async () => {
     // Measured against the live API on 2026-08-14: a second /start moves the
-    // alert deadline to (second start + grace). With three attempts a day and a
+    // alert deadline to (second start + grace). With a nightly run and a
     // multi-hour grace, a /start on a failing run would defer the alert
     // indefinitely and the page would serve a frozen snapshot unnoticed.
     const urls = [];
@@ -174,7 +174,7 @@ test('recovery re-arms a stale trigger and runs one catch-up build', async () =>
     const uuid = await recover(recoveryEnv, async (url, init) => {
         requests.push([url, init.method]);
         if (url === scheduleUrl && init.method === 'PUT') return response(200, {
-            success: true, result: { schedules: [{ cron: '23 4,12,20 * * *' }] }
+            success: true, result: { schedules: [{ cron: '30 2 * * *' }] }
         });
         if (url === scheduleUrl) return response(200, {
             success: true, result: { schedules: [] }
@@ -200,7 +200,7 @@ test('recovery does not rewrite a recently propagated correct trigger', async ()
     const changed = await rearmCron({ CLOUDFLARE_SCHEDULE_TOKEN: 'schedule-secret' }, async (url, init) => {
         calls.push([url, init.method]);
         return response(200, { success: true, result: { schedules: [{
-            cron: '23 4,12,20 * * *', modified_on: modified
+            cron: '30 2 * * *', modified_on: modified
         }] } });
     }, 1_000_000 + 5_000);
     assert.equal(changed, false);

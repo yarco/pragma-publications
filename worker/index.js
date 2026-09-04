@@ -5,10 +5,8 @@
 //   FRESHNESS (HEALTHCHECKS_PING_URL)
 //     Answers "has a refresh succeeded recently?". Only a completed deployment
 //     may change its status. Everything else is a status-neutral `/log`.
-//     Its long grace window is what implements the three-strike alert policy,
-//     which only works if no failing run can move its deadline. Cadence is
-//     three attempts a day 8h apart with an 18h grace, so it pages after the
-//     third consecutive failed attempt.
+//     Cadence is one nightly firing (`30 2 * * *` UTC) with a 6 h grace, so
+//     a missed run pages the same morning. No failing run may move its deadline.
 //
 //     Measured on the live API 2026-08-14: a second `/start` ping moves the
 //     alert deadline to (second start + grace). Repeated attempts against a
@@ -46,7 +44,7 @@ const normalizeBase = value => value?.replace(/\/+$/, '') || null;
 
 const ACCOUNT_ID = 'b43256ec662caecc5ffa2e8315b465ef';
 const SCRIPT_NAME = 'pragma-publications';
-const CRON = '23 4,12,20 * * *';
+export const CRON = '30 2 * * *';
 const SCHEDULES_URL = `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/workers/scripts/${SCRIPT_NAME}/schedules`;
 const SCHEDULE_PROPAGATION_MS = 15 * 60 * 1000;
 const CLOCK_SKEW_MS = 60 * 1000;

@@ -14,25 +14,16 @@
   "assets": {
     "directory": "./dist"
   },
-  // ONE expression, three firings, evenly spaced 8 hours apart.
+  // One nightly firing. SPARQL is daily-synced, so extra daytime builds do not
+  // make the snapshot fresher. 02:30 UTC is 03:30 Lisbon in WEST (same clock
+  // as laptop-backup / tg-backup) and 02:30 Lisbon in WET. Free-plan cron
+  // quota counts expressions, not firings; this still costs one slot.
   //
-  // Keep it as one expression. Cloudflare's free plan caps cron triggers at 5
-  // per account and counts EXPRESSIONS, not firings, so the three separate
-  // array entries this replaced were spending 3 of Primary's 5 slots on a
-  // single schedule. Writing the hours as a list costs one slot.
-  //
-  // The three firings are retries, not freshness — the data is DBLP SPARQL
-  // merged onto a site and may be a day behind. They exist so a transient Workers
-  // Builds failure is retried the same day instead of leaving the site on its
-  // last-good snapshot until tomorrow. They are free under the expression
-  // rule above, so do not trade them away to save quota.
-  //
-  // Even spacing is load bearing: the freshness check's grace is derived from
-  // the interval (2 x 8h + 2h margin = 18h), so it pages after the THIRD
-  // consecutive failed attempt. Change the spacing and that grace has to
-  // change with it.
+  // Freshness grace is 6 h (same class as the other always-on daily Workers).
+  // Heartbeat grace stays 30 min. Change Worker cron, both Healthchecks
+  // schedules, and fleet.json together.
   "triggers": {
-    "crons": ["23 4,12,20 * * *"]
+    "crons": ["30 2 * * *"]
   },
   "observability": {
     "enabled": true

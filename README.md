@@ -61,8 +61,8 @@ first deployment, when nothing is published yet.
 1. A public GitHub repository stores the source.
 2. Cloudflare Workers Builds installs from `package-lock.json`, runs
    `npm run build`, then `npm run deploy:production`.
-3. The deployed Worker serves `dist/` as free static assets. Its three daily Cron
-   Triggers POST a secret deploy hook, ping the heartbeat check, and write a
+3. The deployed Worker serves `dist/` as free static assets. Its nightly Cron
+   Trigger POSTs a secret deploy hook, ping the heartbeat check, and write a
    status-neutral breadcrumb to the freshness check. The hook response's build
    UUID correlates every event for that run.
 4. The deploy command sends the freshness success ping only after `wrangler
@@ -76,8 +76,8 @@ first deployment, when nothing is published yet.
    Cloudflare's immutable version metadata.
 
 This is one production runtime, one source repository, and two external dead-man
-alarms. Static asset requests are free and unlimited; the three daily crons and
-roughly 91 monthly builds — about 61 of the 3,000 free monthly build minutes — are
+alarms. Static asset requests are free and unlimited; the nightly cron and
+roughly 30 monthly builds — well under the 3,000 free monthly build minutes — are
 far inside the Workers Free allowances. No KV, R2, Pages project, paid Worker,
 VPS, or GitHub Actions minutes are used.
 
@@ -92,8 +92,8 @@ VPS, or GitHub Actions minutes are used.
    `npm run deploy:production`.
 4. Create a deploy hook for `main` and store it as Worker secret
    `DEPLOY_HOOK_URL`.
-5. Create two free Healthchecks.io checks, both on `23 4,12,20 * * *` UTC. The
-   freshness check takes an 18-hour grace; store its ping URL as runtime Worker
+5. Create two free Healthchecks.io checks, both on `30 2 * * *` UTC. The
+   freshness check takes a 6-hour grace; store its ping URL as runtime Worker
    secret `HEALTHCHECKS_PING_URL` *and* as a Workers Builds secret of the same
    name, because the build sends both the success ping and failure `/log` events.
    The heartbeat check takes a 30-minute grace; store its ping URL as runtime
@@ -135,23 +135,16 @@ build replaces them atomically; a failed build leaves the last good version live
 
 ### Schedule and alert policy
 
-The scheduled handler runs three times a day at `04:23`, `12:23` and `20:23` UTC.
-DBLP's HTML/XML frontend has failed for hours at a time (`503` on every
-`/pid/{pid}.xml` mirror). The pipeline therefore reads DBLP through SPARQL
-(`https://sparql.dblp.org/sparql`), which is a separate daily-synced service
-and is enough freshness for a static snapshot. SPARQL can still fail
-(`429`, `5xx`, connection errors); three attempts eight hours apart ride that
-out. A single failed slot needs no investigation — the next slot clears it.
+The scheduled handler runs once a night at `02:30` UTC (`03:30` Lisbon in WEST,
+`02:30` in WET), next to laptop-backup / tg-backup. SPARQL is daily-synced, so
+daytime extra builds do not make the snapshot fresher. A missed night pages
+the same morning (6 h freshness grace, same class as the other always-on daily
+Workers).
 
-Tolerated failures are silent by design, so the `/log` body is the only record:
-`GET /api/v3/checks/<uuid>/pings/<n>/body`. A bodiless ping answers `404` with an
-HTML page — that is the API saying "no body", not a fault. The Worker's own
-breadcrumb is a GET and always reads that way; only `scripts/notify-failure.mjs`
-attaches a body.
-
-The policy is: **tolerate two consecutive failed attempts, alert on the third,
-any success resets.** Publications are not time critical, so roughly a day of
-staleness is preferable to an email every time DBLP hiccups.
+`/log` is the forensic channel for a failed generate: `GET /api/v3/checks/<uuid>/pings/<n>/body`.
+A bodiless ping answers `404` with an HTML page — that is the API saying "no body",
+not a fault. The Worker's breadcrumb is a GET and always reads that way; only
+`scripts/notify-failure.mjs` attaches a body.
 
 Two Healthchecks.io checks implement this, with deliberately different jobs.
 
@@ -159,8 +152,8 @@ Two Healthchecks.io checks implement this, with deliberately different jobs.
 |---|---|---|
 | Secret | `HEALTHCHECKS_PING_URL` | `HEARTBEAT_PING_URL` |
 | Question | has a refresh succeeded recently? | did cron fire and did the build get queued? |
-| Schedule | `23 4,12,20 * * *` UTC | `23 4,12,20 * * *` UTC |
-| Grace | **18 h** | 30 min |
+| Schedule | `30 2 * * *` UTC | `30 2 * * *` UTC |
+| Grace | **6 h** | 30 min |
 | Success ping | only after `wrangler deploy` completes | immediately after the deploy hook returns a build UUID |
 | Failure ping | `/log` only — never status changing | `/fail` when the hook is unreachable |
 
@@ -168,31 +161,16 @@ Two Healthchecks.io checks implement this, with deliberately different jobs.
 
 `POST /recover` is a concealed DOWN-only recovery hook for the heartbeat check.
 It accepts a separate constant-time bearer token, restores exactly the configured
-`23 4,12,20 * * *` trigger through Cloudflare's schedules API, and queues one
+`30 2 * * *` trigger through Cloudflare's schedules API, and queues one
 catch-up Workers Build through the existing deploy hook. A recently modified
 correct trigger is left untouched for 15 minutes so webhook retries cannot keep
 restarting Cloudflare's propagation window. The deploy hook has a 30-second
 timeout, and any recovery failure returns non-2xx so Healthchecks can retry.
 
 This webhook must not be enabled on the freshness check. A freshness DOWN means
-three publication builds failed; another automatic build may only hammer the same
+the nightly build failed; another automatic build may only hammer the same
 SPARQL or scraper fault. The heartbeat check is the one that diagnoses a missing
 Cron delivery and can therefore be repaired by re-arming the trigger.
-
-**Why 18 hours.** Slots are eight hours apart, so the third consecutive failure
-lands 16 h after the first missed slot. Grace must exceed 16 h to reach the third
-failure and stay under 24 h so a fourth attempt cannot slip by unreported. 18 h
-sits in that window with two hours of margin, which covers the 20-minute build cap
-plus queueing on the free plan's single concurrent build.
-
-**Even spacing is load bearing.** The grace figure is derived from the interval
-(`2 x 8h + margin`). Staggering the slots to uneven times would silently change how
-many failures are tolerated. Change all three crons together or recompute the grace.
-
-**The freshness check must use a cron schedule, not a simple period.** Healthchecks
-computes the deadline as *(next scheduled time after the last ping) + grace*.
-Configuring an "every 8 hours" period check with the same grace yields a two-strike
-system instead of three.
 
 **Known limitation: an off-schedule success next to a slot can buy an extra strike.**
 If a success ping lands just *after* a slot time while that slot's own build is still
@@ -216,8 +194,7 @@ is failing, so any bug in it produces permanent silence instead of a late email.
 
 Measured against the live Healthchecks API on 2026-08-14: with a 60-second grace, a
 `/start` at `T0` and a second `/start` at `T0+50s` produced a down flip at
-`T1+60s`, not `T0+60s`. A start ping moves the alert deadline. With three attempts
-a day against an 18-hour grace, a `/start` on each failing run would defer the
+`T1+60s`, not `T0+60s`. A start ping moves the alert deadline. With a nightly run against a multi-hour grace, a `/start` on each failing run would defer the
 alert indefinitely and the page would serve a frozen snapshot with nobody notified.
 
 `/log` was measured the same day to leave the deadline untouched — success at
