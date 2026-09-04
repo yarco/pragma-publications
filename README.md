@@ -67,7 +67,7 @@ first deployment, when nothing is published yet.
    UUID correlates every event for that run.
 4. The deploy command sends the freshness success ping only after `wrangler
    deploy` finishes. A failed generation/build/deploy never sends success, so the
-   freshness check alerts once three consecutive attempts have missed.
+   freshness check pages 6 h after the missed nightly slot.
 5. The committed deploy helper refuses any working-tree change, an off-`main`
    checkout, or an unpushed commit. The three generated `dist/` outputs are
    gitignored, so a fresh build never dirties the tree, while anything else
