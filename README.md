@@ -6,7 +6,7 @@ one Cloudflare Worker serves the static files, runs the daily schedule, and
 triggers a Git-connected Workers Build of its next version.
 
 Cross-project production policy lives in the sibling
-[`cloudflare-fleet`](../cloudflare-fleet/README.md) repository. The vault's
+[`automation-fleet`](../automation-fleet/README.md) repository. The vault's
 `AI/Coding/Cloudflare.md` owns fleet topology and decisions; this README owns
 Pragma-specific builds, data gates, recovery, and rollback. Workers Builds is
 the production deploy path; the fleet auditor independently proves its checked-
