@@ -19,5 +19,10 @@
   },
   "devDependencies": {
     "wrangler": "latest"
+  },
+  "allowScripts": {
+    "workerd@1.20260921.1": true,
+    "esbuild@0.28.1": true,
+    "fsevents@2.3.3": true
   }
 }
