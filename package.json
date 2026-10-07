@@ -21,10 +21,8 @@
     "wrangler": "latest"
   },
   "allowScripts": {
-    "workerd@1.20260921.1": true,
-    "esbuild@0.28.1": true,
-    "fsevents@2.3.3": true,
-    "workerd@1.20260923.1": true,
-    "workerd@1.20260930.2": true
+    "esbuild": true,
+    "fsevents": true,
+    "workerd": true
   }
 }
