@@ -31,7 +31,7 @@ async function makeDeployRepo(t) {
   // visible to `git status` and blocks the deploy.
   await fs.writeFile(
     path.join(repo, ".gitignore"),
-    "dist/getPublications.js\ndist/publications.json\ndist/status.json\n",
+    "dist/getPublications.js\ndist/publications.json\ndist/status.json\nnode_modules/\n",
   );
   await Promise.all([
     fs.writeFile(path.join(repo, "source.mjs"), "export const value = 1;\n"),
@@ -45,17 +45,19 @@ async function makeDeployRepo(t) {
   git(repo, "remote", "add", "origin", remote);
   git(repo, "push", "-u", "origin", "main");
 
-  const wrangler = path.join(bin, "wrangler");
-  await fs.writeFile(wrangler, "#!/bin/sh\nexit 0\n");
-  await fs.chmod(wrangler, 0o755);
+  await fs.mkdir(path.join(repo, "node_modules/.bin"), { recursive: true });
+  for (const wrangler of [path.join(bin, "wrangler-as"), path.join(repo, "node_modules/.bin/wrangler")]) {
+    await fs.writeFile(wrangler, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+    await fs.chmod(wrangler, 0o755);
+  }
   return { repo, bin };
 }
 
-function runDeploy(repo, bin) {
+function runDeploy(repo, bin, env = {}) {
   return spawnSync(process.execPath, [deployScript], {
     cwd: repo,
     encoding: "utf8",
-    env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+    env: { ...process.env, WORKERS_CI: "", PATH: `${bin}:${process.env.PATH ?? ""}`, ...env },
   });
 }
 
@@ -67,7 +69,23 @@ test("ignored generated artifacts do not block deploy", async (t) => {
   const result = runDeploy(repo, bin);
 
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^yarcoh\ndeploy\n/m);
+  assert.match(result.stdout, /\(main, local\)/);
   assert.match(result.stdout, /DEPLOYED pragma-publications from pushed commit/);
+});
+
+test("Workers Builds uses locked Wrangler without a local OAuth profile", async (t) => {
+  const { repo, bin } = await makeDeployRepo(t);
+  await fs.rm(path.join(bin, "wrangler-as"));
+  const result = runDeploy(repo, bin, {
+    WORKERS_CI: "1",
+    WORKERS_CI_BRANCH: "main",
+    WORKERS_CI_COMMIT_SHA: git(repo, "rev-parse", "HEAD"),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^deploy\n/m);
+  assert.doesNotMatch(result.stdout, /yarcoh/);
+  assert.match(result.stdout, /\(main, Workers Builds\)/);
 });
 
 test("deploy still rejects source changes", async (t) => {

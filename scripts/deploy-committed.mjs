@@ -51,14 +51,15 @@ async function main() {
   }
 
   const result = spawnSync(
-    "wrangler",
+    isCI ? "node_modules/.bin/wrangler" : "wrangler-as",
     [
+      ...(!isCI ? ["yarcoh"] : []),
       "deploy",
       "--strict",
       "--tag",
       `git-${head}`,
       "--message",
-      `${origin}@${head} (${branch}, Workers Builds)`,
+      `${origin}@${head} (${branch}, ${isCI ? "Workers Builds" : "local"})`,
     ],
     { stdio: "inherit", timeout: 5 * 60 * 1000, killSignal: "SIGTERM" },
   );

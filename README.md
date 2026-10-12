@@ -44,6 +44,11 @@ the committed-source deployment helper; there is no supported stale-`dist`
 shortcut. Workers Builds already invokes `npm run build` before its separate
 `npm run deploy:production` command, so it does not build twice.
 
+Local deployment uses `wrangler-as yarcoh`, the named Primary OAuth profile,
+and the project's locked Wrangler. Refresh it with `wrangler-as yarcoh login`.
+Workers Builds invokes `node_modules/.bin/wrangler` with its CI credentials.
+Neither path depends on this Mac's default Wrangler login.
+
 Every build, local or in Workers Builds, gates against the same thing: the data
 currently published on the live deployment. `BASELINE_URL` and
 `BASELINE_FALLBACK_URL` override the baseline hostnames; unset — a local run —
