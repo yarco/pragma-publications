@@ -39,7 +39,10 @@ npm ci
 npm run deploy
 ```
 
-The manual deploy command runs the complete test and generation build before
+The manual deploy command first refreshes the build toolchain through the fleet's
+`automation-fleet/bin/toolchain.mjs` (wrangler only, committed and pushed alone
+after the tests pass; never under Workers Builds, and never bump it by hand),
+then runs the complete test and generation build before
 the committed-source deployment helper; there is no supported stale-`dist`
 shortcut. Workers Builds already invokes `npm run build` before its separate
 `npm run deploy:production` command, so it does not build twice.
