@@ -20,12 +20,20 @@ go months without a source change.
 ## Why it is static
 
 The source data changes only occasionally. A scheduled build queries DBLP's
-daily-synced SPARQL endpoint for the three author PIDs, fetches the selected-
-publications page once, applies a retention gate, then publishes:
+SPARQL endpoint for the three author PIDs and, if that source fails, tries
+each backup in order. The first backup is each author's person-page XML,
+which dblp.org serves behind an Anubis metarefresh check. The build then
+fetches the selected-publications page once, applies a retention gate, and
+publishes:
 
 - `dist/getPublications.js` — browser payload used by the Webflow embed
 - `dist/publications.json` — last accepted structured data
 - `dist/status.json` — generation time, counts, and persistent high-water marks
+
+SPARQL stays first in the source fan. A backup runs only after SPARQL throws
+or returns nothing, so a restored endpoint is used again on the next build
+without a code change. The person-page backup answers the metarefresh
+challenge dblp.org issues and refuses any other Anubis algorithm.
 
 If an upstream fetch fails or the scraper output collapses, the build exits before
 `wrangler deploy`, so the previous Worker version and its assets remain live.
@@ -144,7 +152,7 @@ build replaces them atomically; a failed build leaves the last good version live
 ### Schedule and alert policy
 
 The scheduled handler runs once a night at `02:30` UTC (`03:30` Lisbon in WEST,
-`02:30` in WET), next to laptop-backup / tg-backup. SPARQL is daily-synced, so
+`02:30` in WET), next to laptop-backup / tg-backup. DBLP is daily-synced, so
 daytime extra builds do not make the snapshot fresher. A missed night pages
 the same morning (6 h freshness grace, same class as the other always-on daily
 Workers).
@@ -177,7 +185,7 @@ timeout, and any recovery failure returns non-2xx so Healthchecks can retry.
 
 This webhook must not be enabled on the freshness check. A freshness DOWN means
 the nightly build failed; another automatic build may only hammer the same
-SPARQL or scraper fault. The heartbeat check is the one that diagnoses a missing
+DBLP or scraper fault. The heartbeat check is the one that diagnoses a missing
 Cron delivery and can therefore be repaired by re-arming the trigger.
 
 **Known limitation: an off-schedule success next to a slot can buy an extra strike.**
@@ -227,7 +235,7 @@ connection reset. `lib/failure-report.mjs` now unwraps the chain to the real err
 A publish-gate rejection is deterministic and will not repair itself on retry, yet
 it shares the three-strike tolerance with transient faults. That is intentional —
 the site stays correct either way — but it means the `/log` reason is what
-distinguishes "SPARQL blipped" from "the scraper is broken" at triage time. If a
+distinguishes "DBLP blipped" from "the scraper is broken" at triage time. If a
 stuck scraper should page sooner, give gate rejections their own check rather than
 shortening the freshness grace.
 

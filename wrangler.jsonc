@@ -15,7 +15,7 @@
   "assets": {
     "directory": "./dist"
   },
-  // One nightly firing. SPARQL is daily-synced, so extra daytime builds do not
+  // One nightly firing. DBLP is daily-synced, so extra daytime builds do not
   // make the snapshot fresher. 02:30 UTC is 03:30 Lisbon in WEST (same clock
   // as laptop-backup / tg-backup) and 02:30 Lisbon in WET. Free-plan cron
   // quota counts expressions, not firings; this still costs one slot.
