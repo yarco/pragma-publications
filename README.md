@@ -81,8 +81,8 @@ first deployment, when nothing is published yet.
    Trigger POSTs a secret deploy hook, ping the heartbeat check, and write a
    status-neutral breadcrumb to the freshness check. The hook response's build
    UUID correlates every event for that run.
-4. The deploy command sends the freshness success ping only after `wrangler
-   deploy` finishes. A failed generation/build/deploy never sends success, so the
+4. The Workers Builds deploy command sends the freshness success ping only after
+   `wrangler deploy` finishes. A failed generation/build/deploy never sends success, so the
    freshness check pages 6 h after the missed nightly slot.
 5. The committed deploy helper refuses any working-tree change, an off-`main`
    checkout, or an unpushed commit. The three generated `dist/` outputs are
@@ -188,23 +188,22 @@ the nightly build failed; another automatic build may only hammer the same
 DBLP or scraper fault. The heartbeat check is the one that diagnoses a missing
 Cron delivery and can therefore be repaired by re-arming the trigger.
 
-**Known limitation: an off-schedule success next to a slot can buy an extra strike.**
-If a success ping lands just *after* a slot time while that slot's own build is still
-in flight — realistically only when a manual re-run finishes in the minute after a
-cron fires — Healthchecks anchors the deadline on the *following* slot. Up to four
-attempts can then fail before the email, roughly 34 h after the last success instead
-of 26 h. Push-triggered Builds are the other source of off-grid success pings: every
-push to `main` builds and deploys, and only deploy-hook runs can heartbeat, so a
-push-deployed success moves the freshness deadline without proving anything about
-cron delivery — the heartbeat check alone answers that question.
+**Off-schedule deployments prove freshness, not a particular cron run.**
+Every push to `main` builds and deploys. A successful off-schedule Workers Build
+(push-triggered or manually retried in the dashboard) also sends a freshness
+success. The local `npm run deploy` does not run that notifier: it requires the
+build secret and `WORKERS_CI_BUILD_UUID`. If a build's success lands just after the
+02:30 UTC slot, Healthchecks anchors its next deadline on the following day's
+slot plus the six-hour grace: 08:30 UTC the next day, nearly 30 hours later.
+Without another success after a missed nightly slot, its deadline is 08:30 UTC
+that same morning.
 
-This is accepted, not overlooked. It is bounded (the alert is late, never absent),
-and no single grace value fixes both cases: tolerating three failures normally
-requires grace > 16 h, while capping the race at three would require grace < 16 h.
-Closing it properly needs a stored attempt counter, whose own failure modes are worse
-— the counter must be incremented by the build container that just failed, and
-tolerated failures would need a keep-alive ping that asserts health while the system
-is failing, so any bug in it produces permanent silence instead of a late email.
+This is a schedule-based freshness contract, not a count of failed attempts.
+The old three-attempts-per-day / three-strike arithmetic no longer applies.
+Only deploy-hook runs can heartbeat, so an off-schedule freshness success does
+not conceal a missing cron delivery from the independent 30-minute-grace
+heartbeat check. Do not send synthetic successes or introduce an attempt counter
+to make failed builds appear healthy.
 
 ### Never send `/start` to the freshness check
 
@@ -223,7 +222,9 @@ flip history are trustworthy.
 
 ### Failure reporting
 
-Because two failures now pass silently, the log trail is the only record of them.
+Failed attempts do not immediately change the freshness check's status; the
+six-hour grace after the nightly slot owns escalation. The log trail records
+each failed attempt while that deadline is still pending.
 `scripts/notify-failure.mjs` runs from the `||` branch of both `npm run build` and
 `npm run deploy:production` and POSTs a `/log` event carrying the stage, build UUID,
 reason, and full `error.cause` chain.
@@ -232,12 +233,11 @@ The cause chain matters: on 2026-08-14 the build log said only
 `[generate] failed: fetch failed`, which cannot distinguish a DNS failure from a
 connection reset. `lib/failure-report.mjs` now unwraps the chain to the real errno.
 
-A publish-gate rejection is deterministic and will not repair itself on retry, yet
-it shares the three-strike tolerance with transient faults. That is intentional —
-the site stays correct either way — but it means the `/log` reason is what
-distinguishes "DBLP blipped" from "the scraper is broken" at triage time. If a
-stuck scraper should page sooner, give gate rejections their own check rather than
-shortening the freshness grace.
+A publish-gate rejection is deterministic and will not repair itself on retry.
+It shares the nightly freshness deadline with transient faults; the last-good
+site stays live either way. Use the `/log` reason to distinguish "DBLP blipped"
+from "the scraper is broken" rather than repeatedly retrying a deterministic
+rejection.
 
 One failure class produces no `/log` body at all: a build killed at Cloudflare's
 platform layer before any repository command runs. Observed 2026-09-03 12:23 UTC
