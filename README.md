@@ -89,7 +89,8 @@ first deployment, when nothing is published yet.
    gitignored, so a fresh build never dirties the tree, while anything else
    appearing under `dist/` is an untracked file and blocks the deploy. The
    helper also enables Wrangler strict mode and stamps the exact Git SHA into
-   Cloudflare's immutable version metadata.
+   Cloudflare's immutable version metadata. The message names the project, not
+   the Git remote URL: Workers Builds can put a temporary credential in that URL.
 
 This is one production runtime, one source repository, and two external dead-man
 alarms. Static asset requests are free and unlimited; the nightly cron and

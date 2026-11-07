@@ -43,13 +43,6 @@ async function main() {
     throw new Error(`refusing unpushed or stale source: HEAD ${head} != origin/${productionBranch} ${remoteHead}`);
   }
 
-  let origin;
-  try {
-    origin = git("remote", "get-url", "origin").replace(/\.git$/, "");
-  } catch {
-    origin = "unknown-origin";
-  }
-
   const result = spawnSync(
     isCI ? "node_modules/.bin/wrangler" : "wrangler-as",
     [
@@ -59,7 +52,7 @@ async function main() {
       "--tag",
       `git-${head}`,
       "--message",
-      `${origin}@${head} (${branch}, ${isCI ? "Workers Builds" : "local"})`,
+      `pragma-publications@${head} (${branch}, ${isCI ? "Workers Builds" : "local"})`,
     ],
     { stdio: "inherit", timeout: 5 * 60 * 1000, killSignal: "SIGTERM" },
   );

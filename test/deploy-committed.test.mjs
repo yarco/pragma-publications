@@ -77,15 +77,19 @@ test("ignored generated artifacts do not block deploy", async (t) => {
 test("Workers Builds uses locked Wrangler without a local OAuth profile", async (t) => {
   const { repo, bin } = await makeDeployRepo(t);
   await fs.rm(path.join(bin, "wrangler-as"));
+  const head = git(repo, "rev-parse", "HEAD");
+  git(repo, "remote", "set-url", "origin", "https://ci:dummy-build-secret@github.com/example/project.git?token=dummy-query-secret");
   const result = runDeploy(repo, bin, {
     WORKERS_CI: "1",
     WORKERS_CI_BRANCH: "main",
-    WORKERS_CI_COMMIT_SHA: git(repo, "rev-parse", "HEAD"),
+    WORKERS_CI_COMMIT_SHA: head,
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /^deploy\n/m);
   assert.doesNotMatch(result.stdout, /yarcoh/);
   assert.match(result.stdout, /\(main, Workers Builds\)/);
+  assert.ok(result.stdout.includes(`--message\npragma-publications@${head} (main, Workers Builds)\n`));
+  assert.doesNotMatch(result.stdout + result.stderr, /dummy-build-secret|dummy-query-secret|github\.com/);
 });
 
 test("deploy still rejects source changes", async (t) => {
